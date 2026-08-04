@@ -45,6 +45,7 @@ Each quietly costs money. This makes all three visible instead of leaving them a
 | **Monthly summary** | Paid, remaining, days worked, leave days, hours past the cap, time lost to rounding, unpaid lunch |
 | **Earnings** | What you'll actually be paid — and separately, the value of time you worked that was never counted |
 | **Pace** | Hours per day needed across the days left to hit the target |
+| **Bulk delete** | Edit mode ticks entries individually or all at once, then clears them in one go |
 | **Overnight shifts** | An out time earlier than the in time rolls to the next day |
 | **Appearance** | Light and dark, following Apple's system palettes |
 | **Offline** | Installs to the home screen and opens with no signal |
@@ -87,7 +88,7 @@ The hourly rate derives from them, and earnings stop climbing once `TARGET_H` is
 
 **Offline.** A service worker caches the app shell with stale-while-revalidate: served from cache instantly, refreshed in the background, so launches are immediate and updates land on the next open.
 
-**Interface.** Built on Apple's design language — the iOS system colour palette in both appearances, inset-grouped lists, hairline separators, native-style alert dialogs, edit mode for deletion, and Apple's animation curves. No CSS framework; roughly 500 lines of hand-written CSS driven by custom properties.
+**Interface.** Built on Apple's design language — the iOS system colour palette in both appearances, inset-grouped lists, hairline separators, native-style alert dialogs, an edit mode with multi-select, and Apple's animation curves. No CSS framework; roughly 500 lines of hand-written CSS driven by custom properties.
 
 ## Running locally
 

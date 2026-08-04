@@ -73,6 +73,7 @@ section:nth-of-type(3){animation-delay:.1s}
   transition:opacity var(--t1) var(--ease);
 }
 .shdr .act:active{opacity:.4}
+.hbtns{display:flex;align-items:flex-end;gap:16px}
 .group{background:var(--fill);border-radius:var(--radius);overflow:hidden;
   transition:background var(--t2) var(--ease)}
 .group+.group{margin-top:20px}
@@ -184,18 +185,31 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
 .ev span{display:block;font-size:12px;color:var(--txt3);font-variant-numeric:tabular-nums}
 .chev{flex:none;color:var(--txt3);font-size:20px;line-height:1;margin-left:-4px;
   transition:opacity var(--t2) var(--ease)}
-/* iOS edit mode */
-.minus{
-  position:absolute;left:14px;top:50%;width:22px;height:22px;border:0;border-radius:50%;
-  background:var(--red);color:#fff;font-size:17px;line-height:1;cursor:pointer;
-  display:grid;place-items:center;padding:0 0 2px;
+/* iOS edit mode — multi-select */
+.selc{
+  position:absolute;left:14px;top:50%;width:22px;height:22px;border-radius:50%;
+  border:1.5px solid var(--txt3);background:none;color:#fff;
+  font-size:12px;line-height:1;display:grid;place-items:center;
   opacity:0;transform:translate(-14px,-50%) scale(.4);pointer-events:none;
-  transition:opacity var(--t2) var(--ease),transform var(--t2) var(--spring);
+  transition:opacity var(--t2) var(--ease),transform var(--t2) var(--spring),
+             background var(--t1) var(--ease),border-color var(--t1) var(--ease);
 }
-.list.editing .ent{padding-left:52px;cursor:default}
-.list.editing .ent:active{background:none}
-.list.editing .minus{opacity:1;transform:translate(0,-50%) scale(1);pointer-events:auto}
+.selc>span{opacity:0;transform:scale(.4);transition:all var(--t1) var(--spring)}
+.list.editing .ent{padding-left:52px}
+.list.editing .selc{opacity:1;transform:translate(0,-50%) scale(1)}
 .list.editing .chev{opacity:0}
+.ent.picked .selc{background:var(--blue);border-color:var(--blue)}
+.ent.picked .selc>span{opacity:1;transform:none}
+.ent.picked{background:color-mix(in srgb,var(--blue) 9%,transparent)}
+.danger{
+  display:block;width:100%;margin-top:20px;border:0;cursor:pointer;
+  background:var(--red);color:#fff;border-radius:12px;
+  font:inherit;font-size:17px;font-weight:600;letter-spacing:-.01em;padding:15px;
+  animation:enter .3s var(--ease);
+  transition:transform var(--t1) var(--spring),opacity var(--t1) var(--ease);
+}
+.danger:active{transform:scale(.97);opacity:.85}
+.danger:disabled{opacity:.35;pointer-events:none}
 .empty{text-align:center;padding:38px 16px;color:var(--txt2);font-size:15px;
   animation:enter var(--t2) var(--ease) both}
 .empty .big{display:block;font-size:34px;margin-bottom:9px;opacity:.35}
@@ -326,8 +340,14 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
 
   <!-- ─── ENTRIES ─── -->
   <section>
-    <div class="shdr"><span>Entries</span><button class="act" id="editMode">Edit</button></div>
+    <div class="shdr"><span>Entries</span>
+      <span class="hbtns">
+        <button class="act" id="selAll" hidden>Select All</button>
+        <button class="act" id="editMode">Edit</button>
+      </span>
+    </div>
     <div class="group"><div class="list" id="rows"></div><div class="empty" id="empty"><span class="big">🗓️</span>No entries this month</div></div>
+    <button class="danger" id="delSel" hidden>Delete</button>
   </section>
 </div>
 
@@ -347,6 +367,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   const K='wh.entries.v1', KH='wh.theme.v1';
   const $=id=>document.getElementById(id);
   let entries=load(), editId=null, editMode=false;
+  const picked=new Set();          // ids ticked in edit mode
   let syncMonthUI=()=>{};
 
   function load(){ try{return JSON.parse(localStorage.getItem(K)||'[]')}catch(e){return[]} }
@@ -517,23 +538,51 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     scrollTo({top:0,behavior:'smooth'});
   }
 
-  function del(id){
-    const e=entries.find(x=>x.id===id); if(!e) return;
-    ask('Delete entry?','This will remove '+e.date+'.','Delete',true,()=>{
-      document.querySelector('.ent[data-id="'+id+'"]')?.classList.add('out');
-      setTimeout(()=>{
-        entries=entries.filter(x=>x.id!==id); persist();
-        if(editId===id) clearForm();
-        render(); toast('Entry deleted');
-      },250);
-    });
+  /* ─── edit mode / multi-select ─── */
+  function refreshSelUI(){
+    const n=picked.size, total=monthEntries().length;
+    $('selAll').hidden=!editMode;
+    $('selAll').textContent = (n&&n===total) ? 'Deselect All' : 'Select All';
+    $('delSel').hidden=!editMode;
+    $('delSel').disabled=!n;
+    $('delSel').textContent = n ? 'Delete '+n+' '+(n===1?'entry':'entries') : 'Delete';
+  }
+
+  function togglePick(id,row){
+    picked.has(id) ? picked.delete(id) : picked.add(id);
+    row.classList.toggle('picked',picked.has(id));
+    refreshSelUI();
   }
 
   $('editMode').onclick=()=>{
     editMode=!editMode;
+    if(!editMode){ picked.clear(); document.querySelectorAll('.ent.picked').forEach(r=>r.classList.remove('picked')); }
     $('rows').classList.toggle('editing',editMode);
     $('editMode').textContent=editMode?'Done':'Edit';
     $('editMode').style.fontWeight=editMode?'600':'400';
+    refreshSelUI();
+  };
+
+  $('selAll').onclick=()=>{
+    const list=monthEntries();
+    const all = picked.size===list.length && list.length>0;
+    picked.clear();
+    if(!all) list.forEach(e=>picked.add(e.id));
+    document.querySelectorAll('.ent').forEach(r=>r.classList.toggle('picked',picked.has(r.dataset.id)));
+    refreshSelUI();
+  };
+
+  $('delSel').onclick=()=>{
+    const n=picked.size; if(!n) return;
+    ask('Delete '+n+' '+(n===1?'entry':'entries')+'?','This cannot be undone.','Delete',true,()=>{
+      document.querySelectorAll('.ent.picked').forEach(r=>r.classList.add('out'));
+      setTimeout(()=>{
+        entries=entries.filter(x=>!picked.has(x.id));
+        if(picked.has(editId)) clearForm();
+        picked.clear(); persist(); render(); refreshSelUI();
+        toast(n+' '+(n===1?'entry':'entries')+' deleted');
+      },250);
+    });
   };
 
   /* ─── render ─── */
@@ -565,7 +614,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
       row.dataset.id=e.id;
       row.style.animationDelay=Math.min(idx*30,360)+'ms';
       row.innerHTML=
-        '<button class="minus" aria-label="Delete">−</button>'+
+        '<span class="selc"><span>✓</span></span>'+
         '<div class="ec">'+
           '<div class="e1">'+head+' <span class="wd">'+wd+'</span>'+
             (e.leave?'<span class="tag leave">Leave</span>':'')+'</div>'+
@@ -575,8 +624,8 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
         (e.leave ? '<div class="ev"><b style="color:var(--txt3)">—</b></div>'
                  : '<div class="ev"><b>'+dec(p)+' h</b><span>'+fmt(r)+' raw</span></div>')+
         '<span class="chev">›</span>';
-      row.onclick=()=>{ if(!editMode) edit(e.id); };
-      row.querySelector('.minus').onclick=ev=>{ ev.stopPropagation(); del(e.id); };
+      if(picked.has(e.id)) row.classList.add('picked');
+      row.onclick=()=>{ editMode ? togglePick(e.id,row) : edit(e.id); };
       box.appendChild(row);
     });
 
@@ -613,6 +662,10 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
       else                 msg='Target met exactly.';
     }
     $('pace').textContent=msg;
+
+    // drop ticks for entries no longer on screen (e.g. after changing month)
+    picked.forEach(id=>{ if(!list.some(e=>e.id===id)) picked.delete(id); });
+    refreshSelUI();
   }
 
   /* ─── appearance ─── */
