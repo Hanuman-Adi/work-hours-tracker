@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Work Hours">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./icon-192.png" type="image/png">
 <title>Work Hours</title>
 <style>
 /* ═══════════ iOS system tokens ═══════════ */
@@ -98,6 +101,17 @@ section:nth-of-type(3){animation-delay:.1s}
 html[data-theme="dark"] input[type=date],
 html[data-theme="dark"] input[type=time],
 html[data-theme="dark"] input[type=month]{color-scheme:dark}
+/* iOS switch */
+.sw{flex:none;width:51px;height:31px;border-radius:99px;border:0;padding:2px;cursor:pointer;
+  background:var(--fill3);transition:background .3s var(--ease)}
+.sw>span{display:block;width:27px;height:27px;border-radius:50%;background:#fff;
+  box-shadow:0 3px 8px rgba(0,0,0,.15),0 0 1px rgba(0,0,0,.2);
+  transition:transform .32s var(--spring)}
+.sw[aria-checked="true"]{background:var(--green)}
+.sw[aria-checked="true"]>span{transform:translateX(20px)}
+/* time rows fade out when the day is marked as leave */
+.grow.off{opacity:.32;pointer-events:none}
+.grow.off input{background:var(--fill2)}
 .mpick{display:flex;gap:6px}
 .mpick select{background:var(--fill2);border:0;border-radius:7px;color:var(--txt);
   font:inherit;font-size:17px;padding:6px 8px}
@@ -163,6 +177,8 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag{display:inline-block;font-size:12px;color:var(--txt2);background:var(--fill2);
   border-radius:5px;padding:1px 6px;margin-left:5px;vertical-align:1px}
+.tag.leave{color:var(--orange);background:color-mix(in srgb,var(--orange) 20%,transparent)}
+.stats .stat:last-child:nth-child(odd){grid-column:1/-1}
 .ev{flex:none;text-align:right}
 .ev b{font-size:17px;font-weight:600;color:var(--blue);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .ev span{display:block;font-size:12px;color:var(--txt3);font-variant-numeric:tabular-nums}
@@ -263,7 +279,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
       <div class="grow"><span class="lbl">Lunch start</span><input type="time" id="lo" title="When you left for lunch"></div>
       <div class="grow"><span class="lbl">Lunch end</span><input type="time" id="li" title="When you came back"></div>
       <div class="grow"><span class="lbl">Out</span><input type="time" id="tout"></div>
-      <div class="grow"><span class="lbl">Note</span><input type="text" id="note" class="wide" placeholder="Optional"></div>
+      <div class="grow"><span class="lbl">Leave</span><button class="sw" id="leave" role="switch" aria-checked="false" aria-label="Mark this date as leave"><span></span></button></div>
     </div>
     <button class="filled" id="save">Save</button>
     <button class="plain" id="cancel" style="display:none">Cancel</button>
@@ -295,6 +311,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
           <div class="stat"><div class="k">Unpaid extra</div><div class="v over" id="sExtra">0<small>h</small></div></div>
           <div class="stat"><div class="k">Lost to rounding</div><div class="v warn" id="sRound">0<small>h</small></div></div>
           <div class="stat"><div class="k">Lunch unpaid</div><div class="v warn" id="sLunch">0<small>h</small></div></div>
+          <div class="stat"><div class="k">Leave days</div><div class="v" id="sLeave">0</div></div>
         </div>
       </div>
     </div>
@@ -339,6 +356,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   const toMin=t=>{ if(!t) return null; const[h,m]=t.split(':').map(Number); return h*60+m; };
   const span =(a,b)=>{ let d=b-a; if(d<0) d+=1440; return d; };
   function rawMinutes(e){
+    if(e.leave) return 0;                 // a leave day contributes no hours
     const i=toMin(e.in), o=toMin(e.out);
     if(i===null||o===null) return 0;
     let w=span(i,o);
@@ -407,15 +425,27 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   }
 
   /* ─── form ─── */
+  const isLeave=()=>$('leave').getAttribute('aria-checked')==='true';
+
+  function setLeave(on){
+    $('leave').setAttribute('aria-checked',on?'true':'false');
+    // grey out the time rows — a leave day has no times to record
+    ['tin','lo','li','tout'].forEach(i=>$(i).closest('.grow').classList.toggle('off',on));
+    preview();
+  }
+  $('leave').onclick=()=>setLeave(!isLeave());
+
   const readForm=()=>({
     id: editId||(Date.now()+'-'+Math.random().toString(36).slice(2,7)),
-    date:$('d').value, in:$('tin').value, lunchOut:$('lo').value,
-    lunchIn:$('li').value, out:$('tout').value, note:$('note').value.trim()
+    date:$('d').value, leave:isLeave(),
+    in:$('tin').value, lunchOut:$('lo').value,
+    lunchIn:$('li').value, out:$('tout').value
   });
 
   function clearForm(){
     editId=null;
-    ['tin','lo','li','tout','note'].forEach(i=>$(i).value='');
+    ['tin','lo','li','tout'].forEach(i=>$(i).value='');
+    setLeave(false);
     $('formTitle').textContent='New entry';
     $('save').textContent='Save';
     $('cancel').style.display='none';
@@ -426,6 +456,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   let lastPrev='';
   function preview(){
     const e=readForm(), p=$('prev');
+    if(e.leave){ p.textContent='Leave — 0 h'; p.classList.add('live'); lastPrev='leave'; return; }
     if(!e.in||!e.out){ p.textContent='—'; p.classList.remove('live'); lastPrev=''; return; }
     const txt=fmt(rawMinutes(e))+' → '+dec(paidMinutes(e))+' h paid';
     p.classList.add('live');
@@ -444,7 +475,15 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
 
   $('save').onclick=()=>{
     const e=readForm();
-    if(!e.date) return shake($('d')),   toast('Pick a date');
+    if(!e.date) return shake($('d')), toast('Pick a date');
+
+    if(e.leave){                                  // leave day: date is all we need
+      e.in=e.out=e.lunchOut=e.lunchIn='';
+      if(entries.some(x=>x.date===e.date&&x.id!==e.id))
+        return ask('Duplicate date','You already have an entry for '+e.date+'.','Add anyway',false,()=>commit(e));
+      return commit(e);
+    }
+
     if(!e.in)   return shake($('tin')), toast('In time required');
     if(!e.out)  return shake($('tout')),toast('Out time required');
     if((e.lunchOut?1:0)+(e.lunchIn?1:0)===1)
@@ -466,8 +505,9 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   function edit(id){
     const e=entries.find(x=>x.id===id); if(!e) return;
     editId=id;
-    $('d').value=e.date; $('tin').value=e.in; $('lo').value=e.lunchOut||'';
-    $('li').value=e.lunchIn||''; $('tout').value=e.out; $('note').value=e.note||'';
+    $('d').value=e.date; $('tin').value=e.in||''; $('lo').value=e.lunchOut||'';
+    $('li').value=e.lunchIn||''; $('tout').value=e.out||'';
+    setLeave(!!e.leave);
     $('formTitle').textContent='Edit entry';
     $('save').textContent='Update';
     $('cancel').style.display='block';
@@ -506,10 +546,11 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     const list=monthEntries();
     const target=TARGET_H;
 
-    let paid=0,raw=0,lunch=0;
+    let paid=0,raw=0,lunch=0,leaveDays=0,workDays=0;
     const box=$('rows'); box.innerHTML='';
 
     list.forEach((e,idx)=>{
+      if(e.leave) leaveDays++; else workDays++;
       const r=rawMinutes(e), p=paidMinutes(e);
       raw+=r; paid+=p;
       const hasLunch=e.lunchOut&&e.lunchIn;
@@ -527,11 +568,12 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
         '<button class="minus" aria-label="Delete">−</button>'+
         '<div class="ec">'+
           '<div class="e1">'+head+' <span class="wd">'+wd+'</span>'+
-            (e.note?'<span class="tag">'+esc(e.note)+'</span>':'')+'</div>'+
-          '<div class="e2">'+e.in+' – '+e.out+
-            (hasLunch?' · lunch '+e.lunchOut+'–'+e.lunchIn:'')+'</div>'+
+            (e.leave?'<span class="tag leave">Leave</span>':'')+'</div>'+
+          '<div class="e2">'+(e.leave ? 'On leave — no hours counted'
+            : e.in+' – '+e.out+(hasLunch?' · lunch '+e.lunchOut+'–'+e.lunchIn:''))+'</div>'+
         '</div>'+
-        '<div class="ev"><b>'+dec(p)+' h</b><span>'+fmt(r)+' raw</span></div>'+
+        (e.leave ? '<div class="ev"><b style="color:var(--txt3)">—</b></div>'
+                 : '<div class="ev"><b>'+dec(p)+' h</b><span>'+fmt(r)+' raw</span></div>')+
         '<span class="chev">›</span>';
       row.onclick=()=>{ if(!editMode) edit(e.id); };
       row.querySelector('.minus').onclick=ev=>{ ev.stopPropagation(); del(e.id); };
@@ -546,7 +588,8 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     countTo($('sRound'),(raw-paid)/60, HRS);
     countTo($('sExtra'), extra/60, HRS);
     countTo($('sLeft'),  Math.max(0,left)/60, HRS);
-    countTo($('sDays'),  list.length);
+    countTo($('sDays'),  workDays);
+    countTo($('sLeave'), leaveDays);
     $('sLeft').className='v'+(left<=0?' good':'');
 
     // pay stops at the 130 h cap; rounding loss + hours past the cap are worked for free
@@ -623,6 +666,12 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   })();
 
   render(); preview();
+
+  /* Offline support. Needs a secure context, so it silently no-ops on file://. */
+  if('serviceWorker' in navigator &&
+     (location.protocol==='https:' || location.hostname==='localhost')){
+    addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+  }
 })();
 </script>
 </body>
