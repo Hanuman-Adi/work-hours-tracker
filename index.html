@@ -179,6 +179,31 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
 .tag{display:inline-block;font-size:12px;color:var(--txt2);background:var(--fill2);
   border-radius:5px;padding:1px 6px;margin-left:5px;vertical-align:1px}
 .tag.leave{color:var(--orange);background:color-mix(in srgb,var(--orange) 20%,transparent)}
+.tag.college{color:var(--purple);background:color-mix(in srgb,var(--purple) 20%,transparent)}
+
+/* ═══════════ bus advisor ═══════════ */
+.hero{display:flex;align-items:center;gap:14px;padding:18px 16px}
+.heroIcon{flex:none;width:48px;height:48px;border-radius:50%;background:var(--fill2);
+  display:grid;place-items:center;font-size:24px}
+.heroBody{flex:1 1 auto;min-width:0}
+.heroTitle{font-size:19px;font-weight:700;letter-spacing:-.02em}
+.heroSub{font-size:13px;color:var(--txt2);margin-top:2px;letter-spacing:-.01em}
+.busrow{display:flex;align-items:center;gap:12px;padding:13px 16px;position:relative;cursor:pointer;
+  transition:background var(--t1) var(--ease)}
+.busrow:active{background:var(--fill2)}
+.busrow+.busrow::before{content:'';position:absolute;left:16px;right:0;top:0;
+  height:1px;transform:scaleY(.5);transform-origin:top;background:var(--sep)}
+.busrow .bico{flex:none;font-size:18px;width:22px;text-align:center}
+.busrow .bmain{flex:1 1 auto;min-width:0}
+.busrow .bt{font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;display:block}
+.busrow .bh{font-size:13px;color:var(--txt2);margin-top:1px;letter-spacing:-.01em}
+.busrow .bh .lunch{color:var(--orange)}
+.busrow .badge{flex:none;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;
+  white-space:nowrap;letter-spacing:-.01em}
+.busrow .badge.rec{color:var(--green);background:color-mix(in srgb,var(--green) 20%,transparent)}
+.busrow .badge.short{color:var(--orange);background:color-mix(in srgb,var(--orange) 20%,transparent)}
+.busrow.rec{background:color-mix(in srgb,var(--green) 9%,transparent)}
+.busrow.chosen{box-shadow:inset 3px 0 0 var(--blue)}
 .stats .stat:last-child:nth-child(odd){grid-column:1/-1}
 .ev{flex:none;text-align:right}
 .ev b{font-size:17px;font-weight:600;color:var(--blue);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
@@ -294,10 +319,30 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
       <div class="grow"><span class="lbl">Lunch end</span><input type="time" id="li" title="When you came back"></div>
       <div class="grow"><span class="lbl">Out</span><input type="time" id="tout"></div>
       <div class="grow"><span class="lbl">Leave</span><button class="sw" id="leave" role="switch" aria-checked="false" aria-label="Mark this date as leave"><span></span></button></div>
+      <div class="grow"><span class="lbl">College today</span><button class="sw" id="college" role="switch" aria-checked="false" aria-label="Mark this date as a college day"><span></span></button></div>
     </div>
     <button class="filled" id="save">Save</button>
     <button class="plain" id="cancel" style="display:none">Cancel</button>
     <p class="foot"><b>Lunch start</b> is when you left, <b>lunch end</b> when you came back. Leave both blank if you didn't break. Overnight shifts are handled.</p>
+  </section>
+
+  <!-- ─── LEAVE-BY ADVISOR ─── -->
+  <section id="advisor" hidden>
+    <div class="shdr"><span>Leave by</span><span class="pill" id="advNeed">—</span></div>
+    <div class="group">
+      <div class="hero">
+        <div class="heroIcon">🍽️</div>
+        <div class="heroBody">
+          <div class="heroTitle" id="lhTitle">—</div>
+          <div class="heroSub" id="lhSub">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="group" id="backGroup" hidden>
+      <div class="grow"><span class="lbl">Back from lunch by</span><span class="val money" id="backBy">—</span></div>
+    </div>
+    <div class="group"><div id="busRows"></div></div>
+    <p class="foot">Desk-leave times are <b id="advWalk">10</b> min before each bus, and skip any bus that leaves after the office closes (<b id="advClose">6:30 PM</b>). Lunch length is whatever zeroes out the rounding loss for that bus, with a <b id="advMinLunch">20</b>-min floor. Tap a bus to lock in its plan.</p>
   </section>
 
   <!-- ─── SUMMARY ─── -->
@@ -326,6 +371,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
           <div class="stat"><div class="k">Lost to rounding</div><div class="v warn" id="sRound">0<small>h</small></div></div>
           <div class="stat"><div class="k">Lunch unpaid</div><div class="v warn" id="sLunch">0<small>h</small></div></div>
           <div class="stat"><div class="k">Leave days</div><div class="v" id="sLeave">0</div></div>
+          <div class="stat"><div class="k">College days</div><div class="v" id="sCollege">0</div></div>
         </div>
       </div>
     </div>
@@ -363,6 +409,10 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
      Nothing past 130 h is paid. Change these two numbers if the deal changes. */
   const TARGET_H=130, MONTHLY_PAY=9100;
   const RATE=MONTHLY_PAY/TARGET_H;
+  const BUS_TIMES=['17:20','17:50','18:35','18:45','19:30']; // PMPL departures — edit here if the schedule changes
+  const WALK_MIN=10;       // minutes from desk to the bus stop
+  const OFFICE_CLOSE='18:30'; // office closes — buses needing a later desk-leave aren't reachable
+  const MIN_LUNCH_MIN=20;  // shortest lunch worth taking
 
   const K='wh.entries.v1', KH='wh.theme.v1';
   const $=id=>document.getElementById(id);
@@ -447,6 +497,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
 
   /* ─── form ─── */
   const isLeave=()=>$('leave').getAttribute('aria-checked')==='true';
+  const isCollege=()=>$('college').getAttribute('aria-checked')==='true';
 
   function setLeave(on){
     $('leave').setAttribute('aria-checked',on?'true':'false');
@@ -456,9 +507,15 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   }
   $('leave').onclick=()=>setLeave(!isLeave());
 
+  function setCollege(on){
+    $('college').setAttribute('aria-checked',on?'true':'false');
+    preview();
+  }
+  $('college').onclick=()=>setCollege(!isCollege());
+
   const readForm=()=>({
     id: editId||(Date.now()+'-'+Math.random().toString(36).slice(2,7)),
-    date:$('d').value, leave:isLeave(),
+    date:$('d').value, leave:isLeave(), college:isCollege(),
     in:$('tin').value, lunchOut:$('lo').value,
     lunchIn:$('li').value, out:$('tout').value
   });
@@ -467,6 +524,8 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     editId=null;
     ['tin','lo','li','tout'].forEach(i=>$(i).value='');
     setLeave(false);
+    setCollege(false);
+    chosenBusIdx=null;
     $('formTitle').textContent='New entry';
     $('save').textContent='Save';
     $('cancel').style.display='none';
@@ -477,12 +536,129 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   let lastPrev='';
   function preview(){
     const e=readForm(), p=$('prev');
-    if(e.leave){ p.textContent='Leave — 0 h'; p.classList.add('live'); lastPrev='leave'; return; }
-    if(!e.in||!e.out){ p.textContent='—'; p.classList.remove('live'); lastPrev=''; return; }
-    const txt=fmt(rawMinutes(e))+' → '+dec(paidMinutes(e))+' h paid';
-    p.classList.add('live');
-    if(txt!==lastPrev){ p.textContent=txt; lastPrev=txt;
-      p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump'); }
+    if(e.leave){ p.textContent='Leave — 0 h'; p.classList.add('live'); lastPrev='leave'; }
+    else if(!e.in||!e.out){ p.textContent='—'; p.classList.remove('live'); lastPrev=''; }
+    else{
+      const txt=fmt(rawMinutes(e))+' → '+dec(paidMinutes(e))+' h paid';
+      p.classList.add('live');
+      if(txt!==lastPrev){ p.textContent=txt; lastPrev=txt;
+        p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump'); }
+    }
+    busAdvisor();
+  }
+
+  /* ─── leave-by bus advisor ─── */
+  const todayStr=()=>{ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); };
+  const to12h=t=>{ const[h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; const h12=((h+11)%12)+1; return h12+':'+String(m).padStart(2,'0')+' '+ap; };
+  const minusMin=(t,min)=>{ const mm=((toMin(t)-min)%1440+1440)%1440; return String(Math.floor(mm/60)).padStart(2,'0')+':'+String(mm%60).padStart(2,'0'); };
+  const addMin  =(t,min)=>{ const mm=((toMin(t)+min)%1440+1440)%1440; return String(Math.floor(mm/60)).padStart(2,'0')+':'+String(mm%60).padStart(2,'0'); };
+
+  // shortest lunch (>= MIN_LUNCH_MIN) that leaves zero minutes stranded to the 30-min round-down,
+  // for a shift running from inTime to outTime with no lunch subtracted yet
+  function lunchDurationNeeded(inTime,outTime){
+    const maxRaw=span(toMin(inTime),toMin(outTime));
+    let dur=maxRaw%30;
+    while(dur<MIN_LUNCH_MIN) dur+=30;
+    return dur;
+  }
+
+  let chosenBusIdx=null;   // bus the user tapped, if any — drives the lunch-back-by calc
+
+  function busAdvisor(){
+    const box=$('busRows'), sec=$('advisor');
+    const e=readForm();
+    if(e.date!==todayStr()||e.leave||!e.in){ sec.hidden=true; return; }
+
+    const now=new Date(), y=now.getFullYear(), mo=now.getMonth()+1;
+    const daysInMonth=new Date(y,mo,0).getDate();
+    const remainingInclToday=Math.max(1,daysInMonth-now.getDate()+1);
+
+    // paid minutes already banked this month from SAVED entries (today's in-progress form excluded)
+    const monthKey=e.date.slice(0,7);
+    const paidSoFar=entries.filter(x=>x.date.slice(0,7)===monthKey&&x.date!==e.date)
+      .reduce((s,x)=>s+paidMinutes(x),0);
+    const leftMin=TARGET_H*60-paidSoFar;
+    const dailyNeedMin=leftMin/remainingInclToday;
+
+    $('advNeed').textContent='Need '+dec(Math.max(0,dailyNeedMin))+' h today';
+
+    // only buses reachable before the office closes — no point suggesting one you can't make
+    const options=BUS_TIMES
+      .map(bt=>({bt,desk:minusMin(bt,WALK_MIN)}))
+      .filter(o=>toMin(o.desk)<=toMin(OFFICE_CLOSE));
+
+    let recIdx=-1;
+    const plans=options.map((o,idx)=>{
+      const lunchDur=lunchDurationNeeded(e.in,o.desk);
+      const paid=span(toMin(e.in),toMin(o.desk))-lunchDur;   // raw == paid: rounding loss engineered to zero
+      const meets=paid>=dailyNeedMin;
+      return {...o,lunchDur,paid,meets};
+    });
+    plans.forEach((pl,idx)=>{ if(recIdx<0&&(pl.meets||idx===plans.length-1)) recIdx=idx; });
+
+    const activeIdx=(chosenBusIdx!==null&&chosenBusIdx<plans.length)?chosenBusIdx:recIdx;
+    const active=plans[activeIdx];
+    if(active){
+      $('lhTitle').textContent='Take a '+active.lunchDur+'-min lunch';
+      $('lhSub').textContent='for the '+to12h(active.bt)+' bus — leave desk '+to12h(active.desk)+' · '+dec(active.paid)+' h paid, zero wasted';
+    }
+
+    box.innerHTML='';
+    plans.forEach((pl,idx)=>{
+      const recommend=idx===recIdx, chosen=idx===activeIdx;
+      const row=document.createElement('div');
+      row.className='busrow'+(recommend?' rec':'')+(chosen&&chosenBusIdx!==null?' chosen':'');
+      const delta=pl.paid-dailyNeedMin;
+      let badge;
+      if(recommend&&pl.meets) badge='<span class="badge rec">Recommended</span>';
+      else if(recommend&&!pl.meets) badge='<span class="badge short">Best available — short '+fmt(Math.abs(delta))+'</span>';
+      else if(pl.meets) badge='<span class="badge rec">Meets target</span>';
+      else badge='<span class="badge short">Short '+fmt(Math.abs(delta))+'</span>';
+
+      row.innerHTML='<span class="bico">🚌</span>'+
+        '<span class="bmain"><span class="bt">'+to12h(pl.bt)+'</span>'+
+        '<span class="bh">leave desk '+to12h(pl.desk)+' · <span class="lunch">'+pl.lunchDur+'m lunch</span> · '+dec(pl.paid)+' h paid</span></span>'+
+        badge;
+      row.onclick=()=>{
+        chosenBusIdx=idx;
+        $('tout').value=pl.desk;
+        $('tout').dispatchEvent(new Event('input',{bubbles:true}));
+        toast('Out set to '+to12h(pl.desk)+' — '+pl.lunchDur+'-min lunch for the '+to12h(pl.bt)+' bus');
+      };
+      box.appendChild(row);
+    });
+    sec.hidden=false;
+    lunchBackBy();
+  }
+
+  // once lunch-start is entered, show/auto-fill exactly when to be back — driven by the active bus plan
+  function lunchBackBy(){
+    const e=readForm(), grp=$('backGroup');
+    if(e.date!==todayStr()||e.leave||!e.in||!e.lunchOut){ grp.hidden=true; return; }
+    // recompute the active plan's lunch duration directly, independent of DOM state
+    const options=BUS_TIMES.map(bt=>({bt,desk:minusMin(bt,WALK_MIN)})).filter(o=>toMin(o.desk)<=toMin(OFFICE_CLOSE));
+    if(!options.length){ grp.hidden=true; return; }
+    const plans=options.map(o=>({...o,lunchDur:lunchDurationNeeded(e.in,o.desk),
+      paid:span(toMin(e.in),toMin(o.desk))-lunchDurationNeeded(e.in,o.desk)}));
+    const now=new Date(), y=now.getFullYear(), mo=now.getMonth()+1;
+    const daysInMonth=new Date(y,mo,0).getDate();
+    const remainingInclToday=Math.max(1,daysInMonth-now.getDate()+1);
+    const monthKey=e.date.slice(0,7);
+    const paidSoFar=entries.filter(x=>x.date.slice(0,7)===monthKey&&x.date!==e.date).reduce((s,x)=>s+paidMinutes(x),0);
+    const dailyNeedMin=(TARGET_H*60-paidSoFar)/remainingInclToday;
+    let recIdx=-1;
+    plans.forEach((pl,idx)=>{ if(recIdx<0&&(pl.paid>=dailyNeedMin||idx===plans.length-1)) recIdx=idx; });
+    const activeIdx=(chosenBusIdx!==null&&chosenBusIdx<plans.length)?chosenBusIdx:recIdx;
+    const active=plans[activeIdx];
+    if(!active){ grp.hidden=true; return; }
+
+    const backTime=addMin(e.lunchOut,active.lunchDur);
+    if(!e.lunchIn){
+      $('li').value=backTime;
+      $('li').dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    $('backBy').textContent=to12h(backTime)+' ('+active.lunchDur+'m)';
+    grp.hidden=false;
   }
 
   function commit(e){
@@ -529,6 +705,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     $('d').value=e.date; $('tin').value=e.in||''; $('lo').value=e.lunchOut||'';
     $('li').value=e.lunchIn||''; $('tout').value=e.out||'';
     setLeave(!!e.leave);
+    setCollege(!!e.college);
     $('formTitle').textContent='Edit entry';
     $('save').textContent='Update';
     $('cancel').style.display='block';
@@ -595,11 +772,12 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     const list=monthEntries();
     const target=TARGET_H;
 
-    let paid=0,raw=0,lunch=0,leaveDays=0,workDays=0;
+    let paid=0,raw=0,lunch=0,leaveDays=0,workDays=0,collegeDays=0;
     const box=$('rows'); box.innerHTML='';
 
     list.forEach((e,idx)=>{
       if(e.leave) leaveDays++; else workDays++;
+      if(e.college) collegeDays++;
       const r=rawMinutes(e), p=paidMinutes(e);
       raw+=r; paid+=p;
       const hasLunch=e.lunchOut&&e.lunchIn;
@@ -617,7 +795,8 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
         '<span class="selc"><span>✓</span></span>'+
         '<div class="ec">'+
           '<div class="e1">'+head+' <span class="wd">'+wd+'</span>'+
-            (e.leave?'<span class="tag leave">Leave</span>':'')+'</div>'+
+            (e.leave?'<span class="tag leave">Leave</span>':'')+
+            (e.college?'<span class="tag college">College</span>':'')+'</div>'+
           '<div class="e2">'+(e.leave ? 'On leave — no hours counted'
             : e.in+' – '+e.out+(hasLunch?' · lunch '+e.lunchOut+'–'+e.lunchIn:''))+'</div>'+
         '</div>'+
@@ -639,6 +818,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
     countTo($('sLeft'),  Math.max(0,left)/60, HRS);
     countTo($('sDays'),  workDays);
     countTo($('sLeave'), leaveDays);
+    countTo($('sCollege'), collegeDays);
     $('sLeft').className='v'+(left<=0?' good':'');
 
     // pay stops at the 130 h cap; rounding loss + hours past the cap are worked for free
@@ -687,6 +867,9 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   $('month').onchange=render;
   $('tgtLbl').textContent=TARGET_H;
   $('payLbl').textContent=rupee(MONTHLY_PAY);
+  $('advWalk').textContent=WALK_MIN;
+  $('advClose').textContent=to12h(OFFICE_CLOSE);
+  $('advMinLunch').textContent=MIN_LUNCH_MIN;
   $('sRate').textContent='₹'+RATE.toFixed(2)+' / h';
 
   /* iOS Safari has no <input type="month"> — swap in month/year selects */
@@ -719,6 +902,7 @@ html[data-theme="dark"] input[type=month]{color-scheme:dark}
   })();
 
   render(); preview();
+  setInterval(()=>{ if($('d').value===todayStr()) busAdvisor(); },30000);
 
   /* Offline support. Needs a secure context, so it silently no-ops on file://. */
   if('serviceWorker' in navigator &&

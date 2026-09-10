@@ -2,7 +2,7 @@
    Strategy: stale-while-revalidate. Serve from cache instantly, then quietly
    refresh the copy in the background so the next launch has any update. */
 
-const CACHE = 'work-hours-v1';
+const CACHE = 'work-hours-v2';
 const ASSETS = [
   './',
   './index.html',
